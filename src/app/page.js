@@ -44,6 +44,7 @@ const content = {
     faq2Answer: "It's secure enough for general sign-ups. However, do not use it to receive sensitive data or important personal information.",
     faq3Question: "Can I send emails?",
     faq3Answer: "No. This service is designed only to receive emails, not to send them.",
+    footerText: "Made with ❤️.",
     alertError: "Failed to generate email. The API service might be down. Please try again later.",
     messageFrom: "From",
     messageSubject: "Subject",
@@ -88,12 +89,20 @@ const content = {
     faq2Answer: "Cukup aman untuk registrasi umum. Namun, jangan gunakan untuk menerima data sensitif atau informasi pribadi yang penting.",
     faq3Question: "Bisakah saya mengirim email?",
     faq3Answer: "Tidak. Layanan ini dirancang hanya untuk menerima email, bukan untuk mengirim.",
+    footerText: "Dibuat dengan ❤️.",
     alertError: "Gagal membuat email. Coba lagi nanti, layanan API mungkin sedang bermasalah.",
     messageFrom: "Dari",
     messageSubject: "Subjek",
     messageDate: "Tanggal"
   }
 };
+
+// --- DUMMY DATA FOR DEMONSTRATION ---
+const dummyMessages = [
+  { id: '1', from: { address: 'welcome@tempmail.za' }, subject: 'Welcome to Your Temporary Inbox!', createdAt: new Date().toISOString(), html: ['<p>This is a sample email to show how the inbox looks. When you generate a real email, these examples will disappear.</p>'], text: 'This is a sample email to show how the inbox looks. When you generate a real email, these examples will disappear.' },
+  { id: '2', from: { address: 'support@tempmail.za' }, subject: 'How to use this service', createdAt: new Date(Date.now() - 60000 * 5).toISOString(), html: ['<p>1. Generate an email. <br>2. Copy it. <br>3. Use it online. <br>4. Check back here for new mail.</p>'], text: '1. Generate an email. 2. Copy it. 3. Use it online. 4. Check back here for new mail.' },
+  { id: '3', from: { address: 'noreply@tempmail.za' }, subject: 'Your account is ready', createdAt: new Date(Date.now() - 60000 * 10).toISOString(), html: ['<p>This is just a placeholder, no real account was created.</p>'], text: 'This is just a placeholder, no real account was created.' },
+];
 
 // Icon Component
 const Icon = ({ path }) => (
@@ -108,12 +117,24 @@ export default function HomePage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [tempEmail, setTempEmail] = useState('');
   const [apiToken, setApiToken] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(dummyMessages); 
   const [loading, setLoading] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [copied, setCopied] = useState(false);
   
   const T = content[language]; 
+
+  // --- NEW: Load data from localStorage on initial render ---
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('tempEmail');
+    const savedToken = localStorage.getItem('apiToken');
+
+    if (savedEmail && savedToken) {
+      setTempEmail(savedEmail);
+      setApiToken(savedToken);
+      setMessages([]); // Clear dummy messages if we have a real session
+    }
+  }, []); // Empty array means this runs only once on mount
 
   // --- FUNCTIONS ---
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
@@ -124,6 +145,10 @@ export default function HomePage() {
     setSelectedMessage(null);
     setTempEmail('');
     setApiToken(null);
+    // --- NEW: Clear previous session from localStorage ---
+    localStorage.removeItem('tempEmail');
+    localStorage.removeItem('apiToken');
+
     try {
       const domainResponse = await fetch('https://api.mail.tm/domains');
       const domains = await domainResponse.json();
@@ -131,23 +156,34 @@ export default function HomePage() {
       const username = Math.random().toString(36).substring(7);
       const newEmail = `${username}@${domain}`;
       const password = Math.random().toString(36).substring(7);
+      
       await fetch('https://api.mail.tm/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: newEmail, password: password }),
       });
+      
       const tokenResponse = await fetch('https://api.mail.tm/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: newEmail, password: password }),
       });
+
       if (!tokenResponse.ok) throw new Error('Failed to get token');
+      
       const tokenData = await tokenResponse.json();
+      
       setTempEmail(newEmail);
       setApiToken(tokenData.token);
+      
+      // --- NEW: Save new session to localStorage ---
+      localStorage.setItem('tempEmail', newEmail);
+      localStorage.setItem('apiToken', tokenData.token);
+
     } catch (error) {
       console.error("Gagal membuat email:", error);
       alert(T.alertError);
+      setMessages(dummyMessages); 
     }
     setLoading(false);
   };
@@ -180,6 +216,15 @@ export default function HomePage() {
   }, [apiToken, messages]);
 
   const viewMessage = async (messageId) => {
+    // Check if it's a dummy message
+    if (!apiToken) {
+      const dummy = dummyMessages.find(m => m.id === messageId);
+      if (dummy) {
+        setSelectedMessage(dummy);
+        return;
+      }
+    }
+
     try {
       const response = await fetch(`https://api.mail.tm/messages/${messageId}`, {
         headers: { 'Authorization': `Bearer ${apiToken}` },
@@ -195,6 +240,7 @@ export default function HomePage() {
   return (
     <>
       <div className={`page-wrapper ${isMenuOpen ? 'menu-open' : ''}`}>
+        {/* Header and Nav sections remain the same */}
         <header className="header">
           <div className="container">
             <div className="logo">📧 {T.logo}</div>
@@ -215,7 +261,6 @@ export default function HomePage() {
             </button>
           </div>
         </header>
-
         <div className={`mobile-nav ${isMenuOpen ? 'open' : ''}`}>
             <a href="#benefits" onClick={toggleMenu}>{T.navBenefits}</a>
             <a href="#how-it-works" onClick={toggleMenu}>{T.navHowItWorks}</a>
@@ -227,6 +272,7 @@ export default function HomePage() {
         </div>
 
         <main>
+          {/* Hero section with inbox */}
           <section className="hero section">
             <div className="container text-center">
               <h1>{T.heroHeadline}</h1>
@@ -241,7 +287,7 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {tempEmail && (
+              {(messages.length > 0 || tempEmail) && (
                 <div className="inbox-section">
                   <div className="inbox-container">
                     <h2 className="inbox-title">{T.inboxTitle}</h2>
@@ -271,12 +317,13 @@ export default function HomePage() {
                   <p><strong>{T.messageFrom}:</strong> {selectedMessage.from.address}</p>
                   <p><strong>{T.messageDate}:</strong> {new Date(selectedMessage.createdAt).toLocaleString()}</p>
                   <hr />
-                  <div className="message-body" dangerouslySetInnerHTML={{ __html: selectedMessage.html[0] || selectedMessage.text.replace(/\n/g, '<br />') }} />
+                  <div className="message-body" dangerouslySetInnerHTML={{ __html: selectedMessage.html?.[0] || selectedMessage.text.replace(/\n/g, '<br />') }} />
                 </div>
               )}
             </div>
           </section>
 
+          {/* Other sections remain the same */}
           <section id="what-is" className="section bg-light">
             <div className="container text-center">
               <h2>{T.whatIsTitle}</h2>
@@ -395,41 +442,17 @@ export default function HomePage() {
         .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
         .btn-copy { background-color: var(--light-text-color); color: var(--background-color); }
         .inbox-section { margin-top: 60px; max-width: 800px; margin-left: auto; margin-right: auto; }
-        
-        .inbox-container {
-          background-color: var(--light-background);
-          border: 1px solid var(--border-color);
-          border-radius: var(--border-radius);
-          padding: 10px 0;
-          margin-top: 40px;
-          overflow: hidden;
-        }
-        .inbox-title {
-          padding: 0 25px 15px 25px;
-          border-bottom: 1px solid var(--border-color);
-        }
-        .inbox-empty {
-          padding: 40px 25px;
-          text-align: center;
-          color: var(--light-text-color);
-        }
+        .inbox-container { background-color: var(--light-background); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 10px 0; margin-top: 40px; overflow: hidden; }
+        .inbox-title { padding: 0 25px 15px 25px; border-bottom: 1px solid var(--border-color); }
+        .inbox-empty { padding: 40px 25px; text-align: center; color: var(--light-text-color); }
         .message-list { list-style-type: none; padding: 0; text-align: left; }
-        .message-list li {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 1px solid var(--border-color);
-          padding: 15px 25px;
-          cursor: pointer;
-          transition: background-color 0.2s;
-        }
+        .message-list li { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 15px 25px; cursor: pointer; transition: background-color 0.2s; }
         .message-list li:hover { background-color: var(--background-color); }
         .message-list li:last-child { border-bottom: none; }
         .message-details { display: flex; flex-direction: column; }
         .from { font-weight: bold; color: var(--text-color); font-size: 1rem; }
         .subject { font-size: 0.9rem; color: var(--light-text-color); margin-top: 2px; }
         .date { font-size: 0.8rem; color: var(--light-text-color); white-space: nowrap; margin-left: 15px; }
-
         .email-generator-card { background-color: var(--light-background); }
         .email-display { background-color: var(--background-color); }
         .message-view { background: var(--light-background); border: 1px solid var(--border-color); }
